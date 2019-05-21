@@ -1,0 +1,12 @@
+{
+  "name": "rustParserTool",
+  "version": "0.0.1",
+  "devDependencies": {
+    "@types/node": "^12.0.2",
+    "typescript": "^3.4.5"
+  },
+  "dependencies": {
+    "file-system": "^2.2.2",
+    "linebyline": "^1.3.0"
+  }
+}
