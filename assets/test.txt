@@ -1,0 +1,17 @@
+        #[no_mangle]
+        pub extern "C" fn fun_name1(
+            enabled1: bool,
+            user_data1: *mut c_void,
+            o_cb: extern "C" fn(user_data: *mut c_void, result: *const FfiResult),
+            cb: extern "C" fn(user_data: *mut c_void, result: *const FfiResult),
+        ) -> bool {
+        }
+
+        #[no_mangle]
+        pub extern "C" fn fun_name2(
+            enabled2: bool,
+            user_data2: *mut c_void,
+            o_cb: extern "C" fn(user_data: *mut c_void, result: *const FfiResult),
+            cb: extern "C" fn(user_data: *mut c_void, result: *const FfiResult),
+        ) {
+        }

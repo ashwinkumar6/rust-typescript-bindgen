@@ -1,4 +1,0 @@
-hey this
-is just
-a sample
-file end
