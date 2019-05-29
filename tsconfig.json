@@ -7,9 +7,9 @@
         "outDir": "dist",
         "baseUrl": ".",
         "strictNullChecks": true,
-        // "noImplicitReturns": true,
-        // "noImplicitThis": true,
-        // "noImplicitAny": true,
+        "noImplicitReturns": true,
+        "noImplicitThis": true,
+        "noImplicitAny": true,
     },
     "include": [
         "src"

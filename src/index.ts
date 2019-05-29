@@ -1,95 +1,146 @@
 import * as fs from "fs";
-import * as ref from "ref";
-import Utils from "./utils";
+import Utils from "./helpers/utils";
+import mapTypes from "./helpers/mapTypes";
+import constants from "./helpers/constants";
 
-const base = require('./refs/base.js');
-const types = base.types;
-
-const constants: { [key: string]: string } = {
-    callbackMethodInterface: "ICallbackMethod",
-    rustReturn: "->"
-}
-
-const callbacks: Array<string> = [
+const callbacks: string[] = [
     "o_cb",
     "o_disconnect_notifier_cb",
 ];
 
-const UnwatedParameters: Array<string> = [
-    "user_data: types.VoidPtr,",
+const UnwatedParameters: string[] = [
+    "user_data: *mut c_void,",
 ];
 
-const mapTypes: { [key: string]: string } = {
-    "*const App": "types.AppPtr",
+const interfaceTypes: { [key: string]: string } = {
     "*const c_char": "string",
-    "*const u8": "types.u8Pointer",
-    "*mut App": "types.AppPtr",
-    "*mut c_void": "types.VoidPtr",
-    "usize": "types.usize",
-    "u64": "types.u64",
-    "bool": "types.bool",
-    // "*const MetadataResponse": types,
-    // "*const MDataInfo": "MDataInfoPtr",
-    // "*const PermissionSet": "PermissionSetPtr",
-    // "*const XorNameArray": "XOR_NAME",
-    // "*const SymSecretKey": "ASYM_SECRETKEYBYTE",
-    // "*const SymNonce": "SYM_NONCEBYTES",
-    // "SignPubKeyHandle": "SignPubKeyHandle",
-    // "MDataEntriesHandle": "MDataEntriesHandle",
-    // "MDataEntryActionsHandle": "MDataEntryActionsHandle",
+    "bool": "boolean",
+    "*mut Authenticator": "any"
 }
 
-// interface IResultCallback {
-//     callback(result: "pointer", ctxt: Function): void
-// }
+const bindingTypes: { [key: string]: string } = {
+    "string": "types.CString",
+    "boolean": "types.bool",
+    "void": "types.Void",
+    "any": "types.voidPointer",
+}
 
-// interface IShortCallback {
-//     callback(user_data: "pointer"): void
-// }
-
-// interface ILongCallback {
-//     callback(user_data: "pointer", result: "pointer", authenticator:, ctxt: Function): void;
-// }
+const jsInterfacePath: string = "./src/Js/ISafeAppBindings.ts";
+const jsStructPath: string = "./src/Js/Structs.ts";
+const jsBindingPath: string = "./src/Js/SafeAppBindings.ts";
 
 class RustParser {
-    public rustFuncDefinition = new Array<string>();
-    private _jsFuncDefinition = new Array<string>();
+    public rustFuncDefinition: { [key: string]: string } = {};
+    public rustStructDefinition = new Array<string>();
     private _jsInterface: string;
-
-    get jsFuncDefinition(): Array<string> {
-        this._jsFuncDefinition = this.updateFuncParameters(this.rustFuncDefinition);
-        return this._jsFuncDefinition;
-    }
+    private _jsStruct: string;
+    private _jsBindings: string;
 
     get jsInterface(): string {
         this._jsInterface = this.genInterface(this.rustFuncDefinition);
         return this._jsInterface;
     }
+    get jsStruct(): string {
+        this._jsStruct = this.genStruct(this.rustStructDefinition);
+        return this._jsStruct;
+    }
+    get jsBindings(): string {
+        this._jsBindings = this.genBindings(this.jsInterface, this.rustFuncDefinition);
+        return this._jsBindings;
+    }
 
     constructor(filePath: string) {
-        var lineArray: Array<string> = fs.readFileSync(filePath).toString().split("\n");
+        var lineArray: string[] = fs.readFileSync(filePath).toString().split("\n");
+
         for (let line = 0; line < lineArray.length; line++) {
+            // generate function definition
             if (lineArray[line].includes("#[no_mangle]")) {
-                let wordArray: Array<string> = lineArray[line + 1].split(" ");
+                let wordArray: string[] = lineArray[line + 1].split(" ");
                 for (let word = 0; word < wordArray.length; word++) {
                     if (wordArray[word].includes("fn")) {
-                        this.generateFuncDefinition(wordArray[Number(word) + 1], lineArray, line)
+                        this.generateFuncDefinition(wordArray[word + 1], lineArray, line)
                     }
                 }
+            }
+
+            // generate struct definition
+            if (lineArray[line].includes("pub struct")) {
+                this.generateStructDefinition(lineArray, line)
             }
         }
     }
 
-    private genInterface(jsFuncDefinition: Array<string>): string {
-        let resultInterface: string = "interface ISafeAppBindings {";
-        let typesArray: Array<string> = Object.keys(mapTypes);
+    private generateFuncDefinition(word: string, lineArray: string[], line: number): void {
+        let tempResult: string = word.trim();
+        let funcName: string = tempResult.substring(0, tempResult.indexOf("("));
+        line++;
+        while (true) {
+            line++;
+            tempResult += lineArray[line].trim().replace("{", "");
+            if (lineArray[line].includes("{"))
+                break;
+        }
+        this.rustFuncDefinition[funcName] = tempResult;
+    }
 
-        jsFuncDefinition.forEach((funcDefinition) => {
+    private generateStructDefinition(lineArray: string[], line: number): void {
+        let tempResult: string = "";
+        for (line; !lineArray[line].includes("}"); line++) {
+            if (lineArray[line].includes("///"))
+                continue;
+            tempResult += lineArray[line].trim();
+        }
+        tempResult += "}";
+        this.rustStructDefinition.push(tempResult);
+    }
+
+    private genStruct(rustStructDefinition: string[]): string {
+        let resultStructs: string = `${constants.jsStructHead}\n\n`;
+        let typesArray: string[] = Object.keys(mapTypes);
+
+        rustStructDefinition.forEach((structDefinition) => {
 
             // format parameter types
             typesArray.forEach((type) => {
+                if (structDefinition.includes(type)) {
+                    structDefinition = structDefinition.split(type).join(mapTypes[type]);
+                }
+            })
+
+            // generate struct head
+            let startIndex: number = structDefinition.indexOf(constants.struct) + constants.struct.length;
+            let endIndex: number = structDefinition.indexOf("{");
+            let structName: string = structDefinition.substring(startIndex, endIndex).trim();
+            let formattedStruct: string = `export const ${structName} = StructType( {`;
+
+            // generate struct body
+            let items: string = structDefinition.substring(
+                structDefinition.indexOf("{") + 1,
+                structDefinition.indexOf("}") - 1
+            );
+            items.split(",").forEach((item) => {
+                if (item.includes("pub"))
+                    item = item.replace("pub", "");
+                formattedStruct += `\n ${item},`;
+            })
+            formattedStruct += "\n} );";
+
+            resultStructs += formattedStruct;
+            resultStructs += "\n\n";
+        });
+
+        return resultStructs;
+    }
+
+    private genInterface(rustFuncDefinition: { [key: string]: string }): string {
+        let resultInterface: string = constants.jsInterfaceHead;
+        let typesArray: string[] = Object.keys(interfaceTypes);
+
+        Object.values(rustFuncDefinition).forEach((funcDefinition) => {
+            // format parameter types
+            typesArray.forEach((type) => {
                 if (funcDefinition.includes(type)) {
-                    funcDefinition = funcDefinition.split(type).join(mapTypes[type]);
+                    funcDefinition = funcDefinition.split(type).join(interfaceTypes[type]);
                 }
             })
 
@@ -108,93 +159,102 @@ class RustParser {
             UnwatedParameters.forEach((type) => {
                 funcDefinition = funcDefinition.replace(type, "");
             });
+
             if (funcDefinition[funcDefinition.length - 2] === ",") {
                 funcDefinition = Utils.setCharAt(funcDefinition, funcDefinition.length - 2, "");
             }
-
 
             // format return type
             if (funcDefinition.includes(constants.rustReturn)) {
                 let startIndex: number = funcDefinition.indexOf(constants.rustReturn);
                 let returnItem: string = funcDefinition.substring(startIndex);
                 funcDefinition = funcDefinition.replace(returnItem, "");
-                funcDefinition += ": session<" + returnItem.substring(2).trim() + ">";
+                funcDefinition += ": Promise<" + returnItem.substring(2).trim() + ">";
             }
             else {
-                funcDefinition += ": session<null>";
+                funcDefinition += ": Promise<void>";
             }
 
             // format function name
             let functionName: string = funcDefinition.substring(0, funcDefinition.indexOf("(") - 1);
-            let formattedFunctionName = Utils.formatFuncName(functionName);
+            let formattedFunctionName = Utils.underscoreToPascalCase(functionName);
             funcDefinition = funcDefinition.replace(functionName, formattedFunctionName);
 
             resultInterface += "\n" + "\t";
             resultInterface += funcDefinition;
         })
-        resultInterface += "\n}";
+        resultInterface += "\n}\n";
         return resultInterface;
     }
 
-    private generateFuncDefinition(word: string, lineArray: Array<string>, line: number): void {
-        let tempResult: string = word.trim();
-        line++;
-        while (true) {
-            line++;
-            tempResult += lineArray[line].trim().replace("{", "");
-            if (lineArray[line].includes("{"))
-                break;
-        }
-        this.rustFuncDefinition.push(tempResult);
-    }
+    private genBindings(jsInterface: string, rustFuncDefinition: { [key: string]: string }): string {
+        let resultFile: string = "";
+        let binding: string = `\n\tprivate native = ffi.Library(libPath, {`;
+        let funcImp: string = "";
+        jsInterface = jsInterface.substring(
+            jsInterface.indexOf("{") + 1,
+            jsInterface.indexOf("}")
+        );
+        let lineArray: string[] = jsInterface.split("\n");
+        for (let i = 0; i < lineArray.length; i++) {
+            const item = lineArray[i];
+            if (item.includes("Promise")) {
 
-    private updateFuncParameters(rustFuncDefinition: Array<string>): Array<string> {
-        var typesArray: Array<string> = Object.keys(mapTypes);
-        rustFuncDefinition.forEach((funcDefinition, definitionIndex) => {
-            typesArray.forEach((type) => {
-                if (funcDefinition.includes(type)) {
-                    funcDefinition = funcDefinition.split(type).join(mapTypes[type]);
-                }
-            })
-            if (funcDefinition.includes(constants.rustCallbackMethod)) {
-                var index: number = funcDefinition.indexOf(constants.rustCallbackMethod);
-                var callBackFunc: string = funcDefinition.substring(index + constants.rustCallbackMethod.length, funcDefinition.length - 2);
-                funcDefinition = funcDefinition.replace(callBackFunc, constants.callbackMethodInterface);
+                // generate binding
+                let funcName: string = item.substring(0, item.indexOf("(")).trim();
+                let returnType: string = item.substring(
+                    item.lastIndexOf("<") + 1,
+                    item.lastIndexOf(">")
+                ).trim();
+                returnType = bindingTypes[returnType];
+                funcName = Utils.pascalToUnderscoreCase(funcName);
+                let rustDefinition = rustFuncDefinition[funcName];
+                let parameterTypes = Utils.genBindingParameters(rustDefinition);
+
+                binding += `\n\t\t"${funcName}": [${returnType},[${parameterTypes}]],`;
+
+                // generate function implementation
+                funcImp += `\n${item} {`;
+                funcImp += "\n\t\t// todo";
+                funcImp += "\n\t\treturn new Promise(resolve => {});";
+                funcImp += "\n\t}";
+                funcImp += "\n";
             }
-            rustFuncDefinition[definitionIndex] = funcDefinition;
-            return rustFuncDefinition;
-        })
-        return rustFuncDefinition;
+        }
+        // generate final result file
+        resultFile += constants.jsBindingHead;
+        binding += `\n\t});`;
+        binding += "\n";
+        resultFile += binding
+        resultFile += funcImp
+        resultFile += "}\n"
+        return resultFile;
     }
 }
 
-let rustParser = new RustParser("assets/mod(safe_authenticator).rs");
-// console.log(rustParser.rustFuncDefinition);
-// console.log("\n\n");
-// console.log(rustParser.jsInterface);
+let rustParser = new RustParser("sample_data/mod(safe_authenticator).rs");
+Utils.fileWriter(jsInterfacePath, rustParser.jsInterface);
+Utils.fileWriter(jsBindingPath, rustParser.jsBindings);
 
-Utils.fileWriter("ISafeAppBindings.ts",rustParser.jsInterface);
+// import AppBindings from "./Js/SafeAppBindings";
+// let appBindings = new AppBindings();
+// console.log(appBindings.authIsMock());
 
-
-
-
-// console.log(rustParser.rustFuncDefinition);
-// console.log("\n\n");
-// console.log(rustParser.JsFuncDefinition);
-
+// --------------------------------------------------------
 // const ffi = require("ffi");
 // const libPath = "assets/safe_app.dll";
 
 // interface IAppBindings {
 //     app_is_mock(): Boolean
 // }
-
 // class AppBindings implements IAppBindings {
 
 //     private native = ffi.Library(libPath, {
 //         "app_is_mock": [types.bool,[]],
 //     });
+
 //     app_is_mock(): Boolean {
+//         let a:string = "ref";
 //         return this.native.app_is_mock();
 //     }
 // }

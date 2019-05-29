@@ -3,11 +3,11 @@
   "version": "0.0.1",
   "devDependencies": {
     "@types/node": "^12.0.2",
+    "@types/ref": "0.0.28",
     "typescript": "^3.4.5"
   },
   "dependencies": {
     "@types/ffi": "^0.2.2",
-    "@types/ref": "0.0.28",
     "@types/ref-array": "0.0.28",
     "@types/ref-struct": "0.0.29",
     "enum": "^2.5.0",
