@@ -10,6 +10,7 @@ const callbacks: string[] = [
 
 const excludeParameters: string[] = [
     "user_data: *mut c_void,",
+    "auth: *mut Authenticator",
 ];
 
 const excludeFunctions: string[] = [
@@ -20,19 +21,13 @@ const excludeFunctions: string[] = [
 const interfaceTypes: { [key: string]: string } = {
     "*const c_char": "string",
     "bool": "boolean",
-    "*mut Authenticator": "any"
 }
 
 const bindingTypes: { [key: string]: string } = {
     "string": "types.CString",
     "boolean": "types.bool",
     "void": "types.Void",
-    "any": "types.voidPointer",
 }
-
-const jsInterfacePath: string = "./src/Js/ISafeAppBindings.ts";
-const jsStructPath: string = "./src/Js/Structs.ts";
-const jsBindingPath: string = "./src/Js/SafeAppBindings.ts";
 
 class RustParser {
     public rustFuncDefinition: { [key: string]: string } = {};
@@ -55,7 +50,7 @@ class RustParser {
     }
 
     constructor(filePath: string) {
-        var lineArray: string[] = fs.readFileSync(filePath).toString().split("\n");
+        let lineArray: string[] = fs.readFileSync(filePath).toString().split("\n");
 
         for (let line = 0; line < lineArray.length; line++) {
             // generate function definition
@@ -148,7 +143,7 @@ class RustParser {
             let formattedFunctionName = Utils.underscoreToPascalCase(functionName);
             funcDefinition = funcDefinition.replace(functionName, formattedFunctionName);
 
-            // Don't add unwanted functions to interface
+            // Don't add manual functions to interface
             if (excludeFunctions.indexOf(functionName) !== -1) {
                 return
             }
@@ -194,7 +189,13 @@ class RustParser {
             resultInterface += "\n" + "\t";
             resultInterface += funcDefinition;
         })
-        resultInterface += "\n}\n";
+
+        // add manual functions from file ISafeAppBindingsManual.ts
+        let manual: string = fs.readFileSync(constants.jsManualInterfacePath).toString();
+        manual = manual.substring(manual.indexOf("{") + 1, manual.indexOf("}"));
+
+        resultInterface += manual;
+        resultInterface += "}\n";
         return resultInterface;
     }
 
@@ -224,28 +225,39 @@ class RustParser {
 
                 binding += `\n\t\t"${funcName}": [${returnType},[${parameterTypes}]],`;
 
+                // Don't add function implementation for manual functions
+                if (excludeFunctions.indexOf(funcName) !== -1) {
+                    continue;
+                }
+
                 // generate function implementation
-                funcImp += `\n${item} {`;
+                funcImp += `\n\t${item.trim()} {`;
                 funcImp += "\n\t\t// todo";
                 funcImp += "\n\t\treturn new Promise(resolve => {});";
                 funcImp += "\n\t}";
                 funcImp += "\n";
             }
         }
+
+        // add manual functions from file ISafeAppBindingsManual.ts
+        let manual: string = fs.readFileSync(constants.jsManualBindingPath).toString();
+        manual = manual.substring(manual.indexOf("{") + 1, manual.lastIndexOf("}"));
+
         // generate final result file
         resultFile += constants.jsBindingHead;
         binding += `\n\t});`;
         binding += "\n";
         resultFile += binding
         resultFile += funcImp
+        resultFile += manual
         resultFile += "}\n"
         return resultFile;
     }
 }
 
 let rustParser = new RustParser("sample_data/mod(safe_authenticator).rs");
-Utils.fileWriter(jsInterfacePath, rustParser.jsInterface);
-Utils.fileWriter(jsBindingPath, rustParser.jsBindings);
+Utils.fileWriter(constants.jsInterfacePath, rustParser.jsInterface);
+Utils.fileWriter(constants.jsBindingPath, rustParser.jsBindings);
 
 // let rustParser = new RustParser("sample_data/req.rs");
-// Utils.fileWriter(jsStructPath, rustParser.jsStruct);
+// Utils.fileWriter(constants.jsStructPath, rustParser.jsStruct);

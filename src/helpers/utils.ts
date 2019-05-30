@@ -29,6 +29,7 @@ class Utils {
         let endIndex: number = 0;
         let bindingParam: string[] = [];
         let flag: boolean = true;
+
         // fetching individual parameters from rust method and mapping with respective js types
         for (let i = 0; i < parameters.length; i++) {
             if (parameters[i] === "(") {
@@ -38,8 +39,8 @@ class Utils {
                 flag = true;
             }
 
-            if (parameters[i] === "," && flag) {
-                endIndex = i;
+            if ((parameters[i] === "," && flag) || i == parameters.length - 1) {
+                endIndex = (i == parameters.length - 1) ? i + 1 : i;
                 let temp = parameters.substring(startIndex, endIndex);
 
                 temp = temp.substring(
