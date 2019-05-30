@@ -6,17 +6,16 @@ const constants: { [key: string]: string } = {
 
     // Auto generated code
     jsStructHead:
-        `import * as ref from 'ref';
-        import * as StructType from 'ref-struct';
-        import * as types from "./refs/types";`,
+        `import * as ref from 'ref';\n`+
+        `import * as StructType from 'ref-struct';\n`+
+        `import * as types from "../refs/types";`,
     jsInterfaceHead:
-        `import * as types from "../refs/types";\n
-        export default interface ISafeAppBindings {`,
+        `export default interface ISafeAppBindings {`,
     jsBindingHead:
-        `import ISafeAppBindings from "./ISafeAppBindings"
-        import * as types from "../refs/types";\n
-        const ffi = require("ffi");
-        const libPath = "assets/safe_app.dll";\n
-        export default class AppBindings implements ISafeAppBindings {`,
+        `import ISafeAppBindings from "./ISafeAppBindings";\n`+
+        `import * as types from "../refs/types";\n\n`+
+        `const ffi = require("ffi");\n`+
+        `const libPath = "assets/safe_app.dll";\n\n`+
+        `export default class AppBindings implements ISafeAppBindings {`,
 }
 export default constants;

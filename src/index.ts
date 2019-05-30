@@ -8,8 +8,13 @@ const callbacks: string[] = [
     "o_disconnect_notifier_cb",
 ];
 
-const UnwatedParameters: string[] = [
+const excludeParameters: string[] = [
     "user_data: *mut c_void,",
+];
+
+const excludeFunctions: string[] = [
+    "create_acc",
+    "login",
 ];
 
 const interfaceTypes: { [key: string]: string } = {
@@ -95,7 +100,7 @@ class RustParser {
     }
 
     private genStruct(rustStructDefinition: string[]): string {
-        let resultStructs: string = `${constants.jsStructHead}\n\n`;
+        let resultStructs: string = `${constants.jsStructHead}\n`;
         let typesArray: string[] = Object.keys(mapTypes);
 
         rustStructDefinition.forEach((structDefinition) => {
@@ -125,18 +130,29 @@ class RustParser {
             })
             formattedStruct += "\n} );";
 
-            resultStructs += formattedStruct;
-            resultStructs += "\n\n";
+            resultStructs += `\n${formattedStruct}`;
+            resultStructs += "\n";
         });
 
         return resultStructs;
     }
 
-    private genInterface(rustFuncDefinition: { [key: string]: string }): string {
+    private genInterface(rustFuncDefinitions: { [key: string]: string }): string {
         let resultInterface: string = constants.jsInterfaceHead;
         let typesArray: string[] = Object.keys(interfaceTypes);
 
-        Object.values(rustFuncDefinition).forEach((funcDefinition) => {
+        Object.values(rustFuncDefinitions).forEach((funcDefinition) => {
+
+            // format function name
+            let functionName: string = funcDefinition.substring(0, funcDefinition.indexOf("("));
+            let formattedFunctionName = Utils.underscoreToPascalCase(functionName);
+            funcDefinition = funcDefinition.replace(functionName, formattedFunctionName);
+
+            // Don't add unwanted functions to interface
+            if (excludeFunctions.indexOf(functionName) !== -1) {
+                return
+            }
+
             // format parameter types
             typesArray.forEach((type) => {
                 if (funcDefinition.includes(type)) {
@@ -156,7 +172,7 @@ class RustParser {
             })
 
             // remove unwanted items
-            UnwatedParameters.forEach((type) => {
+            excludeParameters.forEach((type) => {
                 funcDefinition = funcDefinition.replace(type, "");
             });
 
@@ -174,11 +190,6 @@ class RustParser {
             else {
                 funcDefinition += ": Promise<void>";
             }
-
-            // format function name
-            let functionName: string = funcDefinition.substring(0, funcDefinition.indexOf("(") - 1);
-            let formattedFunctionName = Utils.underscoreToPascalCase(functionName);
-            funcDefinition = funcDefinition.replace(functionName, formattedFunctionName);
 
             resultInterface += "\n" + "\t";
             resultInterface += funcDefinition;
@@ -236,28 +247,5 @@ let rustParser = new RustParser("sample_data/mod(safe_authenticator).rs");
 Utils.fileWriter(jsInterfacePath, rustParser.jsInterface);
 Utils.fileWriter(jsBindingPath, rustParser.jsBindings);
 
-// import AppBindings from "./Js/SafeAppBindings";
-// let appBindings = new AppBindings();
-// console.log(appBindings.authIsMock());
-
-// --------------------------------------------------------
-// const ffi = require("ffi");
-// const libPath = "assets/safe_app.dll";
-
-// interface IAppBindings {
-//     app_is_mock(): Boolean
-// }
-// class AppBindings implements IAppBindings {
-
-//     private native = ffi.Library(libPath, {
-//         "app_is_mock": [types.bool,[]],
-//     });
-
-//     app_is_mock(): Boolean {
-//         let a:string = "ref";
-//         return this.native.app_is_mock();
-//     }
-// }
-
-// var appBindings = new AppBindings();
-// console.log("Is Mock?", appBindings.app_is_mock());
+// let rustParser = new RustParser("sample_data/req.rs");
+// Utils.fileWriter(jsStructPath, rustParser.jsStruct);
